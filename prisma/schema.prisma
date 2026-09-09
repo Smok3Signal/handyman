@@ -1,0 +1,302 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  EMPLOYER
+  TECHNICIAN
+}
+
+enum JobStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  COUNTERED
+  EMPLOYER_COUNTERED
+  ON_THE_WAY
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  REDO_REQUESTED
+  SATISFIED
+  DISPUTED
+  CANCELLED
+}
+
+enum DistressStatus {
+  ACTIVE
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  phone         String?
+  role          UserRole
+  latitude      Float?
+  longitude     Float?
+  profileImage  String?
+  address       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  isAvailable   Boolean   @default(true)
+  suspended     Boolean   @default(false)   // F14a — Admin account suspension
+  emailVerified Boolean   @default(false)
+
+  technicianProfile       TechnicianProfile?
+  jobRequestsAsEmployer   JobRequest[]       @relation("EmployerJobs")
+  jobRequestsAsTechnician JobRequest[]       @relation("TechnicianJobs")
+  sentMessages            Message[]          @relation("SentMessages")
+  reviewsGiven            Review[]           @relation("ReviewsGiven")
+  reviewsReceived         Review[]           @relation("ReviewsReceived")
+  portfolioItems          PortfolioItem[]
+  availability            Availability[]
+  notifications           Notification[]
+  supportTickets          SupportTicket[]
+  accounts                Account[]
+  sessions                Session[]
+  disputesAsEmployer      Dispute[]          @relation("EmployerDisputes")
+  disputesAsTechnician    Dispute[]          @relation("TechnicianDisputes")
+  distressSignals         DistressSignal[]   @relation("EmployerDistress")
+  distressProposals       DistressProposal[] @relation("TechnicianProposals")
+}
+
+model TechnicianProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+  businessName      String
+  serviceCategory   String
+  yearsOfExperience Int
+  basePrice         Float
+  description       String
+  averageRating     Float    @default(0)
+  totalReviews      Int      @default(0)
+  rank              String   @default("Bronze")
+  isTopPerformer    Boolean  @default(false)
+  officeAddress     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model JobRequest {
+  id               String    @id @default(cuid())
+  employerId       String
+  employer         User      @relation("EmployerJobs", fields: [employerId], references: [id])
+  technicianId     String
+  technician       User      @relation("TechnicianJobs", fields: [technicianId], references: [id])
+  description      String
+  offeredPrice     Float
+  counterPrice     Float?
+  status           JobStatus @default(PENDING)
+
+  technicianLat    Float?
+  technicianLng    Float?
+  arrivedAt        DateTime?
+  satisfiedAt      DateTime?
+  redoRequested    Boolean   @default(false)
+  redoReason       String?
+
+  arrivedImages    String[]  @default([])
+  completedImages  String[]  @default([])
+
+  distressSignalId String?
+  distressSignal   DistressSignal? @relation(fields: [distressSignalId], references: [id])
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  messages         Message[]
+  review           Review?
+  dispute          Dispute?
+}
+
+model Message {
+  id           String     @id @default(cuid())
+  jobRequestId String
+  jobRequest   JobRequest @relation(fields: [jobRequestId], references: [id])
+  senderId     String
+  sender       User       @relation("SentMessages", fields: [senderId], references: [id])
+  content      String
+  createdAt    DateTime   @default(now())
+}
+
+model Review {
+  id              String     @id @default(cuid())
+  jobRequestId    String     @unique
+  jobRequest      JobRequest @relation(fields: [jobRequestId], references: [id])
+  reviewerId      String
+  reviewer        User       @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  revieweeId      String
+  reviewee        User       @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+  rating          Int
+  quality         Int        @default(5)
+  professionalism Int        @default(5)
+  punctuality     Int        @default(5)
+  comment         String?
+  createdAt       DateTime   @default(now())
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model PortfolioItem {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  imageUrl       String
+  title          String
+  description    String?
+  jobRequestId   String?
+  isCompletedJob Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model Availability {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  dayOfWeek Int
+
+  @@unique([userId, dayOfWeek])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  category    String
+  subject     String
+  message     String
+  status      String   @default("OPEN")
+  adminReply  String?              // F14c — Admin reply to support ticket
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Dispute {
+  id                String     @id @default(cuid())
+  jobRequestId      String     @unique
+  jobRequest        JobRequest @relation(fields: [jobRequestId], references: [id])
+  employerId        String
+  employer          User       @relation("EmployerDisputes", fields: [employerId], references: [id])
+  technicianId      String
+  technician        User       @relation("TechnicianDisputes", fields: [technicianId], references: [id])
+  reason            String
+  status            String     @default("OPEN")
+  outcome           String?
+  defendedAt        DateTime?
+  resolvedAt        DateTime?
+  defenseStatement  String?
+  defenseImages     String[]
+  rankDocked        Boolean    @default(false)
+  noticePlaced      Boolean    @default(false)
+  noticeExpiresAt   DateTime?
+ resolutionDeadline DateTime?  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model DistressSignal {
+  id          String         @id @default(cuid())
+  employerId  String
+  employer    User           @relation("EmployerDistress", fields: [employerId], references: [id])
+
+  title       String
+  description String
+  category    String
+  budget      Float?
+  latitude    Float
+  longitude   Float
+  radiusKm    Float          @default(20)
+  status      DistressStatus @default(ACTIVE)
+  expiresAt   DateTime
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  proposals   DistressProposal[]
+  jobRequests JobRequest[]
+}
+
+model DistressProposal {
+  id            String         @id @default(cuid())
+  signalId      String
+  signal        DistressSignal @relation(fields: [signalId], references: [id])
+  technicianId  String
+  technician    User           @relation("TechnicianProposals", fields: [technicianId], references: [id])
+
+  proposedPrice Float
+  message       String
+  status        ProposalStatus @default(PENDING)
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([signalId, technicianId])
+}
